@@ -108,5 +108,212 @@ contract StakingTest is Test {
     
     }
 
+    function test_getReward_with_no_rewards() public {
+        // test getReward when user has no rewards
+        vm.prank(bob);
+        staking.getReward();
+        assertEq(staking.rewards(bob), 0, "Rewards should be 0");
+    }
+
+    function test_getReward_with_rewards() public {
+        // Setup staking and rewards first
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        // Bob stakes some tokens
+        deal(address(stakingToken), bob, 10e18);
+        vm.startPrank(bob);
+        IERC20(address(stakingToken)).approve(address(staking), type(uint256).max);
+        staking.stake(5e18);
+        vm.stopPrank();
+        
+        // Setup rewards
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        vm.stopPrank();
+        
+        // Move time forward to accrue rewards
+        vm.warp(block.timestamp + 1 days);
+        
+        // Check earned rewards before claiming
+        uint256 earnedBefore = staking.earned(bob);
+        assertGt(earnedBefore, 0, "Should have earned some rewards");
+        
+        // Claim rewards
+        uint256 bobRewardBalanceBefore = IERC20(address(rewardToken)).balanceOf(bob);
+        vm.prank(bob);
+        staking.getReward();
+        
+        // Verify rewards were transferred
+        uint256 bobRewardBalanceAfter = IERC20(address(rewardToken)).balanceOf(bob);
+        assertGt(bobRewardBalanceAfter, bobRewardBalanceBefore, "Reward balance should increase");
+        assertEq(staking.rewards(bob), 0, "Rewards should be reset to 0");
+    }
+
+    function test_earned_function() public {
+        // Test earned function with no stake
+        assertEq(staking.earned(bob), 0, "Should have 0 earned with no stake");
+        
+        // Setup staking and rewards
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(stakingToken), bob, 10e18);
+        vm.startPrank(bob);
+        IERC20(address(stakingToken)).approve(address(staking), type(uint256).max);
+        staking.stake(5e18);
+        vm.stopPrank();
+        
+        // Setup rewards
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        vm.stopPrank();
+        
+        // Should still be 0 immediately after
+        assertEq(staking.earned(bob), 0, "Should be 0 immediately after setup");
+        
+        // Move time forward and check earned increases
+        vm.warp(block.timestamp + 1 days);
+        assertGt(staking.earned(bob), 0, "Should have earned rewards after time passes");
+    }
+
+    function test_lastTimeRewardApplicable() public {
+        // Should return 0 when no rewards are set (since finishAt is 0)
+        assertEq(staking.lastTimeRewardApplicable(), 0, "Should return 0 when finishAt is 0");
+        
+        // Setup rewards
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        vm.stopPrank();
+        
+        // Should return current timestamp when within reward period
+        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Should return current timestamp during reward period");
+        
+        // Move time past finish time
+        vm.warp(block.timestamp + 2 weeks);
+        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Should return finishAt when past reward period");
+    }
+
+    function test_rewardPerToken_with_zero_totalSupply() public {
+        // Test rewardPerToken when totalSupply is 0
+        assertEq(staking.rewardPerToken(), 0, "Should return rewardPerTokenStored when totalSupply is 0");
+    }
+
+    function test_rewardPerToken_with_stakers() public {
+        // Setup staking
+        deal(address(stakingToken), bob, 10e18);
+        vm.startPrank(bob);
+        IERC20(address(stakingToken)).approve(address(staking), type(uint256).max);
+        staking.stake(5e18);
+        vm.stopPrank();
+        
+        // Setup rewards
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        vm.stopPrank();
+        
+        uint256 rewardPerTokenBefore = staking.rewardPerToken();
+        
+        // Move time forward
+        vm.warp(block.timestamp + 1 days);
+        
+        uint256 rewardPerTokenAfter = staking.rewardPerToken();
+        assertGt(rewardPerTokenAfter, rewardPerTokenBefore, "rewardPerToken should increase over time");
+    }
+
+    function test_notifyRewardAmount_with_remaining_rewards() public {
+        // Setup initial rewards
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 200 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 200 ether);
+        staking.notifyRewardAmount(100 ether);
+        
+        // Move time forward but not past finish
+        vm.warp(block.timestamp + 3 days);
+        
+        // Add more rewards while previous period is still active
+        staking.notifyRewardAmount(100 ether);
+        
+        // Verify the rate was updated correctly (should include remaining rewards)
+        assertGt(staking.rewardRate(), 0, "Reward rate should be set");
+        assertEq(staking.finishAt(), block.timestamp + 1 weeks, "FinishAt should be updated");
+        vm.stopPrank();
+    }
+
+    function test_setRewardsDuration_after_period_ends() public {
+        // Setup and complete a reward period
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        
+        // Move time past the reward period
+        vm.warp(block.timestamp + 2 weeks);
+        
+        // Should now be able to set new duration
+        staking.setRewardsDuration(2 weeks);
+        assertEq(staking.duration(), 2 weeks, "Duration should be updated");
+        vm.stopPrank();
+    }
+
+    function test_updateReward_modifier_with_address_zero() public {
+        // This tests the updateReward modifier with address(0)
+        // which is called in notifyRewardAmount
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        
+        uint256 updatedAtBefore = staking.updatedAt();
+        staking.notifyRewardAmount(100 ether);
+        
+        // Verify updatedAt was updated (this tests the modifier with address(0))
+        assertGt(staking.updatedAt(), updatedAtBefore, "updatedAt should be updated");
+        vm.stopPrank();
+    }
+
+    function test_min_function_both_branches() public {
+        // This indirectly tests the _min function through lastTimeRewardApplicable
+        
+        // Setup rewards
+        vm.prank(owner);
+        staking.setRewardsDuration(1 weeks);
+        
+        deal(address(rewardToken), owner, 100 ether);
+        vm.startPrank(owner); 
+        IERC20(address(rewardToken)).transfer(address(staking), 100 ether);
+        staking.notifyRewardAmount(100 ether);
+        vm.stopPrank();
+        
+        // Test when block.timestamp < finishAt (should return block.timestamp)
+        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Should return block.timestamp when it's smaller");
+        
+        // Test when block.timestamp > finishAt (should return finishAt)
+        vm.warp(block.timestamp + 2 weeks);
+        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Should return finishAt when block.timestamp is larger");
+    }
+
 
 }

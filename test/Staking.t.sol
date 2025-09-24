@@ -112,7 +112,7 @@ contract StakingTest is Test {
         // test getReward when user has no rewards
         vm.prank(bob);
         staking.getReward();
-        assertEq(staking.rewards(bob), 0, "Rewards should be 0");
+        assertEq(staking.rewards(bob), 0, "Rewards must be 0");
     }
 
     function test_getReward_with_rewards() public {
@@ -139,7 +139,7 @@ contract StakingTest is Test {
         
         // Check earned rewards before claiming
         uint256 earnedBefore = staking.earned(bob);
-        assertGt(earnedBefore, 0, "Should have earned some rewards");
+        assertGt(earnedBefore, 0, "Must have earned some rewards");
         
         // Claim rewards
         uint256 bobRewardBalanceBefore = IERC20(address(rewardToken)).balanceOf(bob);
@@ -148,13 +148,13 @@ contract StakingTest is Test {
         
         // Verify rewards were transferred
         uint256 bobRewardBalanceAfter = IERC20(address(rewardToken)).balanceOf(bob);
-        assertGt(bobRewardBalanceAfter, bobRewardBalanceBefore, "Reward balance should increase");
-        assertEq(staking.rewards(bob), 0, "Rewards should be reset to 0");
+        assertGt(bobRewardBalanceAfter, bobRewardBalanceBefore, "Reward balance must increase");
+        assertEq(staking.rewards(bob), 0, "Rewards must be reset to 0");
     }
 
     function test_earned_function() public {
         // Test earned function with no stake
-        assertEq(staking.earned(bob), 0, "Should have 0 earned with no stake");
+        assertEq(staking.earned(bob), 0, "Earned is 0 with no stake");
         
         // Setup staking and rewards
         vm.prank(owner);
@@ -174,16 +174,16 @@ contract StakingTest is Test {
         vm.stopPrank();
         
         // Should still be 0 immediately after
-        assertEq(staking.earned(bob), 0, "Should be 0 immediately after setup");
+        assertEq(staking.earned(bob), 0, "Earned is 0 right after setup");
         
         // Move time forward and check earned increases
         vm.warp(block.timestamp + 1 days);
-        assertGt(staking.earned(bob), 0, "Should have earned rewards after time passes");
+        assertGt(staking.earned(bob), 0, "Earned rewards after time passes");
     }
 
     function test_lastTimeRewardApplicable() public {
         // Should return 0 when no rewards are set (since finishAt is 0)
-        assertEq(staking.lastTimeRewardApplicable(), 0, "Should return 0 when finishAt is 0");
+        assertEq(staking.lastTimeRewardApplicable(), 0, "Returns 0 when finishAt is 0");
         
         // Setup rewards
         vm.prank(owner);
@@ -196,16 +196,16 @@ contract StakingTest is Test {
         vm.stopPrank();
         
         // Should return current timestamp when within reward period
-        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Should return current timestamp during reward period");
+        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Returns current timestamp during reward period");
         
         // Move time past finish time
         vm.warp(block.timestamp + 2 weeks);
-        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Should return finishAt when past reward period");
+        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Returns finishAt when past reward period");
     }
 
     function test_rewardPerToken_with_zero_totalSupply() public {
         // Test rewardPerToken when totalSupply is 0
-        assertEq(staking.rewardPerToken(), 0, "Should return rewardPerTokenStored when totalSupply is 0");
+        assertEq(staking.rewardPerToken(), 0, "Returns rewardPerTokenStored when totalSupply is 0");
     }
 
     function test_rewardPerToken_with_stakers() public {
@@ -232,7 +232,7 @@ contract StakingTest is Test {
         vm.warp(block.timestamp + 1 days);
         
         uint256 rewardPerTokenAfter = staking.rewardPerToken();
-        assertGt(rewardPerTokenAfter, rewardPerTokenBefore, "rewardPerToken should increase over time");
+        assertGt(rewardPerTokenAfter, rewardPerTokenBefore, "rewardPerToken increases over time");
     }
 
     function test_notifyRewardAmount_with_remaining_rewards() public {
@@ -252,8 +252,8 @@ contract StakingTest is Test {
         staking.notifyRewardAmount(100 ether);
         
         // Verify the rate was updated correctly (should include remaining rewards)
-        assertGt(staking.rewardRate(), 0, "Reward rate should be set");
-        assertEq(staking.finishAt(), block.timestamp + 1 weeks, "FinishAt should be updated");
+        assertGt(staking.rewardRate(), 0, "Reward rate is set");
+        assertEq(staking.finishAt(), block.timestamp + 1 weeks, "FinishAt is updated");
         vm.stopPrank();
     }
 
@@ -272,7 +272,7 @@ contract StakingTest is Test {
         
         // Should now be able to set new duration
         staking.setRewardsDuration(2 weeks);
-        assertEq(staking.duration(), 2 weeks, "Duration should be updated");
+        assertEq(staking.duration(), 2 weeks, "Duration is updated");
         vm.stopPrank();
     }
 
@@ -290,7 +290,7 @@ contract StakingTest is Test {
         staking.notifyRewardAmount(100 ether);
         
         // Verify updatedAt was updated (this tests the modifier with address(0))
-        assertGt(staking.updatedAt(), updatedAtBefore, "updatedAt should be updated");
+        assertGt(staking.updatedAt(), updatedAtBefore, "updatedAt is updated");
         vm.stopPrank();
     }
 
@@ -308,11 +308,11 @@ contract StakingTest is Test {
         vm.stopPrank();
         
         // Test when block.timestamp < finishAt (should return block.timestamp)
-        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Should return block.timestamp when it's smaller");
+        assertEq(staking.lastTimeRewardApplicable(), block.timestamp, "Returns block.timestamp when it's smaller");
         
         // Test when block.timestamp > finishAt (should return finishAt)
         vm.warp(block.timestamp + 2 weeks);
-        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Should return finishAt when block.timestamp is larger");
+        assertEq(staking.lastTimeRewardApplicable(), staking.finishAt(), "Returns finishAt when block.timestamp is larger");
     }
 
 
